@@ -79,7 +79,7 @@ h1{font-size:22px;margin:0 0 4px;font-weight:700;letter-spacing:-.2px}
 </div>
 <script src="https://www.gstatic.com/charts/loader.js"></script>
 <script>
-const SHEET_ID='1-5mDAbpXxIP-wS9_pPC3plTEETF3HMvOsbbZJ798DJ4', GID='522661301';
+const SHEET_ID='1mLBVRMy2EFlq47ZSRuY7dASVx98mYOdaZu-NGXz8GbQ', GID='0';
 const DOWN='▼', RIGHT='▶';
 const C={ok:'var(--ok)',partial:'var(--amber)',oos:'var(--red)'};
 const LBL={ok:'Available',partial:'Broken',oos:'No stock'};
@@ -93,7 +93,7 @@ function load(){
   const url='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?gid='+GID+'&headers=1&tq='+tq;
   const q=new google.visualization.Query(url);
   q.send(function(r){
-    if(r.isError()){ $('count').textContent='Could not load the sheet ('+r.getMessage()+'). Make sure the Raw Data - Total tab is shared (Anyone with the link) or Published to web.'; $('asof').textContent='Live load failed'; return; }
+    if(r.isError()){ $('count').textContent='Could not load the sheet ('+r.getMessage()+'). Make sure the feed sheet is shared (Anyone with the link) or Published to web.'; $('asof').textContent='Live load failed'; return; }
     const dt=r.getDataTable(), n=dt.getNumberOfRows(), m=new Map();
     for(let i=0;i<n;i++){
       let name=dt.getValue(i,0); if(name==null||(''+name).trim()==='')continue;
@@ -110,7 +110,7 @@ function load(){
       if(isTall){o.tt++; if(inv>=10)o.ta++; o.tinv+=inv;}
     }
     RAW=[...m.values()];
-    $('asof').textContent='Live from the sheet — loaded '+new Date().toLocaleString();
+    $('asof').textContent='Live from the sheet - loaded '+new Date().toLocaleString();
     setupFilters(); rebuild();
   });
 }
