@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Product Availability - Available & Non-Broken Colors</title>
+<style>
+:root{color-scheme:light;--bg:#f6f5f2;--card:#fff;--ink:#1b1b1b;--muted:#6b6b6b;--line:#e7e4de;--ok:#15a34a;--okbg:#e7f7ee;--amber:#d97706;--amberbg:#fdf1e0;--red:#dc2626;--redbg:#fdecec;--accent:#0f766e;--accentbg:#e6f2f0;--chip:#f0efeb;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px;line-height:1.45;}
+.wrap{max-width:1180px;margin:0 auto;padding:20px 18px 60px;}
+h1{font-size:22px;margin:0 0 4px;font-weight:700;letter-spacing:-.2px}
+.sub{color:var(--muted);font-size:13px;margin:0 0 2px}
+.rule{display:inline-block;background:var(--accentbg);color:var(--accent);font-weight:600;padding:3px 10px;border-radius:20px;font-size:12px;margin-top:8px}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:18px 0 6px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.kpi .n{font-size:24px;font-weight:700;letter-spacing:-.5px}
+.kpi .l{font-size:11.5px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px}
+.kpi.ok .n{color:var(--ok)} .kpi.amber .n{color:var(--amber)} .kpi.red .n{color:var(--red)}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:18px 0 6px;position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:5;border-bottom:1px solid var(--line)}
+.controls input[type=search],.controls select{border:1px solid var(--line);background:var(--card);border-radius:9px;padding:9px 11px;font-size:13px;color:var(--ink)}
+.controls input[type=search]{min-width:210px;flex:1 1 210px}
+.seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--card)}
+.seg button{border:0;background:transparent;padding:9px 12px;font-size:12.5px;cursor:pointer;color:var(--muted);white-space:nowrap}
+.seg button.on{background:var(--accent);color:#fff;font-weight:600}
+.count{color:var(--muted);font-size:12.5px;margin:8px 2px 14px}
+.cat-summary{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:6px 0 16px}
+.cat-summary h3{margin:0 0 10px;font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.catrow{display:grid;grid-template-columns:150px 1fr 120px;gap:12px;align-items:center;margin:6px 0;font-size:12.5px}
+.catbar{height:16px;border-radius:6px;overflow:hidden;display:flex;background:#eee}
+.catbar span{display:block;height:100%}
+.catrow .pct{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.prod{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:10px 0;overflow:hidden}
+.phead{display:flex;align-items:center;gap:14px;padding:13px 16px;cursor:pointer;user-select:none}
+.phead:hover{background:#fbfaf8}
+.pname{font-weight:650;font-size:15px;flex:1 1 auto;min-width:0}
+.pname .arrow{color:var(--muted);font-size:11px;margin-right:8px;display:inline-block;width:9px}
+.chip{background:var(--chip);color:#555;border-radius:20px;padding:2px 9px;font-size:11px;white-space:nowrap}
+.pstats{display:flex;align-items:center;gap:14px;flex:0 0 auto}
+.pbar{width:150px;height:14px;border-radius:7px;overflow:hidden;display:flex;background:#eee}
+.pbar span{display:block;height:100%}
+.pfrac{font-size:13px;font-variant-numeric:tabular-nums;min-width:110px;text-align:right;line-height:1.35}
+.pfrac b{font-size:15px}
+.pbody{display:none;padding:4px 16px 16px;border-top:1px solid var(--line)}
+.prod.open .pbody{display:block}
+.colors{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:9px;margin-top:12px}
+.col{border:1px solid var(--line);border-radius:10px;padding:9px 11px;display:flex;flex-direction:column;gap:6px}
+.col.ok{border-left:4px solid var(--ok)} .col.partial{border-left:4px solid var(--amber)} .col.oos{border-left:4px solid var(--red)}
+.col .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.col .cn{font-weight:600;font-size:13px}
+.badge{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:20px;white-space:nowrap}
+.badge.ok{background:var(--okbg);color:var(--ok)} .badge.partial{background:var(--amberbg);color:var(--amber)} .badge.oos{background:var(--redbg);color:var(--red)}
+.col .meta{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.mini{height:7px;border-radius:4px;background:#eee;overflow:hidden}
+.mini span{display:block;height:100%}
+.empty{color:var(--muted);text-align:center;padding:40px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:2px 2px 0}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:middle}
+.foot{color:var(--muted);font-size:11.5px;margin-top:26px;text-align:center;line-height:1.6}
+@media(max-width:720px){.kpis{grid-template-columns:repeat(2,1fr)}.pbar{width:80px}.phead{flex-wrap:wrap}.catrow{grid-template-columns:110px 1fr 70px}}
+</style></head>
+<body><div class="wrap">
+<h1>Product Availability &mdash; Available &amp; Non-Broken Colors</h1>
+<p class="sub">BlissClub warehouse stock, aggregated live to product &times; colour level from the <b>Raw Data - Total</b> sheet.</p>
+<p class="sub"><span id="asof">Loading live data from the sheet&hellip;</span> &middot; Use the Height filter for Regular vs Tall.</p>
+<span class="rule">A colour is &ldquo;available &amp; non-broken&rdquo; when &ge; 40% of its sizes each have &ge; 10 units in stock</span>
+<div class="kpis" id="kpis"></div>
+<div class="cat-summary"><h3>Availability by category</h3><div id="catRows"></div></div>
+<div class="controls">
+<input type="search" id="q" placeholder="Search product or colour...">
+<select id="fheight"><option value="all">Height: All (Regular + Tall)</option><option value="reg">Height: Regular only</option><option value="tall">Height: Tall only</option></select>
+<select id="fcat"></select>
+<select id="fcl"></select>
+<div class="seg" id="status"><button data-v="all" class="on">All colours</button><button data-v="ok">Available &amp; non-broken</button><button data-v="partial">Broken</button><button data-v="oos">No stocked sizes</button></div>
+<select id="sort"><option value="avail_desc">Sort: Availability % (high&rarr;low)</option><option value="avail_asc">Sort: Availability % (low&rarr;high)</option><option value="inv_desc">Sort: Total inventory (high&rarr;low)</option><option value="inv_asc">Sort: Total inventory (low&rarr;high)</option><option value="broken_desc">Sort: Most broken / unstocked colours</option><option value="name">Sort: Product A&rarr;Z</option><option value="colors_desc">Sort: Most colours</option></select>
+</div>
+<div class="legend"><span><i style="background:var(--ok)"></i>Available &amp; non-broken (&ge;40% sizes &ge;10 units)</span><span><i style="background:var(--amber)"></i>Broken (1-39% sizes &ge;10 units)</span><span><i style="background:var(--red)"></i>No stocked sizes (0 sizes &ge;10 units)</span></div>
+<div class="count" id="count">Loading&hellip;</div>
+<div id="list"></div>
+<div class="foot">Reads the Raw Data - Total sheet live on each load &middot; availability = sizes with &ge;10 units &divide; total sizes.<br>Requires the sheet tab to be shared (Anyone with the link) or Published to web.</div>
+</div>
+<script src="https://www.gstatic.com/charts/loader.js"></script>
+<script>
+const SHEET_ID='1-5mDAbpXxIP-wS9_pPC3plTEETF3HMvOsbbZJ798DJ4', GID='522661301';
+const DOWN='▼', RIGHT='▶';
+const C={ok:'var(--ok)',partial:'var(--amber)',oos:'var(--red)'};
+const LBL={ok:'Available',partial:'Broken',oos:'No stock'};
+const STLBL={ok:'Available & non-broken',partial:'Broken',oos:'No stocked sizes'};
+let RAW=[], recs=[], products=[], height='all', statusFilter='all';
+const $=id=>document.getElementById(id);
+google.charts.load('current');
+google.charts.setOnLoadCallback(load);
+function load(){
+  const tq=encodeURIComponent('select B,C,D,F,G,H');
+  const url='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?gid='+GID+'&headers=1&tq='+tq;
+  const q=new google.visualization.Query(url);
+  q.send(function(r){
+    if(r.isError()){ $('count').textContent='Could not load the sheet ('+r.getMessage()+'). Make sure the Raw Data - Total tab is shared (Anyone with the link) or Published to web.'; $('asof').textContent='Live load failed'; return; }
+    const dt=r.getDataTable(), n=dt.getNumberOfRows(), m=new Map();
+    for(let i=0;i<n;i++){
+      let name=dt.getValue(i,0); if(name==null||(''+name).trim()==='')continue;
+      name=(''+name).trim();
+      const color=((dt.getValue(i,1)||'-')+'').trim();
+      const size=(dt.getValue(i,2)||'')+'';
+      const cat=((dt.getValue(i,3)||'-')+'').trim();
+      let inv=dt.getValue(i,4); inv=(inv==null?0:+inv)||0;
+      const cls=((dt.getValue(i,5)||'-')+'').trim();
+      const isTall=size.indexOf('Tall')>=0;
+      const k=name+'|||'+color;
+      let o=m.get(k); if(!o){o={prod:name,color:color,cat:cat,cl:cls,t:0,a:0,inv:0,tt:0,ta:0,tinv:0};m.set(k,o);}
+      o.t++; if(inv>=10)o.a++; o.inv+=inv;
+      if(isTall){o.tt++; if(inv>=10)o.ta++; o.tinv+=inv;}
+    }
+    RAW=[...m.values()];
+    $('asof').textContent='Live from the sheet — loaded '+new Date().toLocaleString();
+    setupFilters(); rebuild();
+  });
+}
+function dims(r){
+  if(height==='reg') return {T:r.t-r.tt, A:r.a-r.ta, INV:r.inv-r.tinv};
+  if(height==='tall') return {T:r.tt, A:r.ta, INV:r.tinv};
+  return {T:r.t, A:r.a, INV:r.inv};
+}
+function tierOf(A,T){ return A===0?'oos':(T>0&&A/T>=0.4?'ok':'partial'); }
+function rebuild(){
+  recs=[];
+  for(const r of RAW){ const dm=dims(r); if(dm.T<=0) continue;
+    recs.push({prod:r.prod,color:r.color,cat:r.cat,cl:r.cl,t:dm.T,a:dm.A,inv:dm.INV,pct:dm.T>0?dm.A/dm.T:0,tier:tierOf(dm.A,dm.T)}); }
+  const pm=new Map();
+  for(const r of recs){ if(!pm.has(r.prod))pm.set(r.prod,{name:r.prod,cat:r.cat,cl:r.cl,colors:[]}); pm.get(r.prod).colors.push(r); }
+  products=[...pm.values()];
+  products.forEach(p=>{ p.ok=p.colors.filter(c=>c.tier==='ok').length; p.partial=p.colors.filter(c=>c.tier==='partial').length;
+    p.oos=p.colors.filter(c=>c.tier==='oos').length; p.tot=p.colors.length; p.availPct=p.tot?p.ok/p.tot:0; p.inv=p.colors.reduce((s,c)=>s+c.inv,0); });
+  renderKPIs(); renderCat(); render();
+}
+function renderKPIs(){
+  const K=[{n:products.length,l:'Products',c:''},{n:recs.length,l:'Colours (in view)',c:''},
+    {n:recs.filter(r=>r.tier==='ok').length,l:'Available & non-broken',c:'ok'},
+    {n:recs.filter(r=>r.tier==='partial').length,l:'Broken (partial)',c:'amber'},
+    {n:recs.filter(r=>r.tier==='oos').length,l:'No stocked sizes',c:'red'}];
+  $('kpis').innerHTML=K.map(k=>{ const pct=k.l.indexOf('Colours')<0&&k.c&&recs.length?' <span style="font-size:13px;color:var(--muted);font-weight:600">('+Math.round(k.n/recs.length*100)+'%)</span>':'';
+    return '<div class="kpi '+k.c+'"><div class="n">'+k.n.toLocaleString()+pct+'</div><div class="l">'+k.l+'</div></div>'; }).join('');
+}
+function renderCat(){
+  const ca={}; for(const r of recs){(ca[r.cat]=ca[r.cat]||{ok:0,partial:0,oos:0,t:0});ca[r.cat].ok+=r.tier==='ok';ca[r.cat].partial+=r.tier==='partial';ca[r.cat].oos+=r.tier==='oos';ca[r.cat].t++;}
+  const cl=Object.keys(ca).filter(c=>c&&c!=='-').sort((a,b)=>ca[b].t-ca[a].t);
+  $('catRows').innerHTML=cl.map(c=>{ const a=ca[c],w=x=>(x/a.t*100).toFixed(1)+'%';
+    return '<div class="catrow"><div>'+c+' <span style="color:var(--muted)">('+a.t+')</span></div><div class="catbar"><span style="width:'+w(a.ok)+';background:var(--ok)"></span><span style="width:'+w(a.partial)+';background:var(--amber)"></span><span style="width:'+w(a.oos)+';background:var(--red)"></span></div><div class="pct">'+Math.round(a.ok/a.t*100)+'% avail</div></div>'; }).join('');
+}
+function setupFilters(){
+  const cats=[...new Set(RAW.map(r=>r.cat))].filter(c=>c&&c!=='-').sort();
+  $('fcat').innerHTML='<option value="">All categories</option>'+cats.map(c=>'<option>'+c+'</option>').join('');
+  const cls=[...new Set(RAW.map(r=>r.cl))].filter(c=>c&&c!=='-').sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0));
+  $('fcl').innerHTML='<option value="">All price brackets</option>'+cls.map(c=>'<option>'+c+'</option>').join('');
+}
+document.querySelectorAll('#status button').forEach(b=>b.onclick=()=>{ document.querySelectorAll('#status button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); statusFilter=b.dataset.v; render(); });
+$('fheight').onchange=e=>{height=e.target.value;rebuild();};
+$('q').oninput=render; $('fcat').onchange=render; $('fcl').onchange=render; $('sort').onchange=render;
+const openSet=new Set();
+function render(){
+  const q=$('q').value.trim().toLowerCase(), cf=$('fcat').value, clf=$('fcl').value, sort=$('sort').value;
+  let list=products.filter(p=>!cf||p.cat===cf).filter(p=>!clf||p.cl===clf);
+  const view=[];
+  for(const p of list){
+    let cols=p.colors.filter(c=>statusFilter==='all'||c.tier===statusFilter);
+    if(q){ const pm=p.name.toLowerCase().includes(q); cols=cols.filter(c=>pm||c.color.toLowerCase().includes(q)); if(!pm && cols.length===0) continue; }
+    if(cols.length===0) continue;
+    view.push({p,cols});
+  }
+  const cmp={
+    avail_desc:(a,b)=>b.p.availPct-a.p.availPct||b.p.ok-a.p.ok,
+    avail_asc:(a,b)=>a.p.availPct-b.p.availPct||a.p.ok-b.p.ok,
+    inv_desc:(a,b)=>b.p.inv-a.p.inv,
+    inv_asc:(a,b)=>a.p.inv-b.p.inv,
+    broken_desc:(a,b)=>(b.p.partial+b.p.oos)-(a.p.partial+a.p.oos),
+    name:(a,b)=>a.p.name.localeCompare(b.p.name),
+    colors_desc:(a,b)=>b.p.tot-a.p.tot,
+  }[sort];
+  view.sort(cmp);
+  const shownColors=view.reduce((s,v)=>s+v.cols.length,0);
+  const hlbl=height==='reg'?'Regular sizes':(height==='tall'?'Tall sizes':'all sizes');
+  $('count').textContent=view.length+' products - '+shownColors+' colours shown ('+hlbl+')'+(statusFilter!=='all'?' - '+STLBL[statusFilter]:'');
+  const html=view.map(v=>{
+    const p=v.p, w=x=>(x/p.tot*100).toFixed(1)+'%', open=openSet.has(p.name)?' open':'';
+    const cols=v.cols.slice().sort((a,b)=>b.pct-a.pct).map(c=>{
+      const pctTxt=Math.round(c.pct*100)+'%';
+      return '<div class="col '+c.tier+'"><div class="top"><span class="cn">'+esc(c.color)+'</span><span class="badge '+c.tier+'">'+LBL[c.tier]+'</span></div>'+
+       '<div class="mini"><span style="width:'+pctTxt+';background:'+C[c.tier]+'"></span></div>'+
+       '<div class="meta"><span>'+c.a+' / '+c.t+' sizes &ge;10u</span><span>'+pctTxt+' &middot; '+c.inv.toLocaleString()+' units</span></div></div>';
+    }).join('');
+    return '<div class="prod'+open+'" data-n="'+encodeURIComponent(p.name)+'"><div class="phead"><div class="pname"><span class="arrow">'+(open?DOWN:RIGHT)+'</span>'+esc(p.name)+
+      ' &nbsp;<span class="chip">'+esc(p.cat)+'</span> <span class="chip">Rs '+esc(p.cl)+'</span></div>'+
+      '<div class="pstats"><div class="pbar" title="'+p.ok+' available / '+p.partial+' broken / '+p.oos+' no stock"><span style="width:'+w(p.ok)+';background:var(--ok)"></span><span style="width:'+w(p.partial)+';background:var(--amber)"></span><span style="width:'+w(p.oos)+';background:var(--red)"></span></div>'+
+      '<div class="pfrac"><b style="color:var(--ok)">'+p.ok+'</b> / '+p.tot+' avail<br><span style="font-size:11px;color:var(--muted);font-weight:400">'+p.inv.toLocaleString()+' units</span></div></div></div>'+
+      '<div class="pbody"><div class="colors">'+cols+'</div></div></div>';
+  }).join('');
+  $('list').innerHTML=html||'<div class="empty">No products match these filters.</div>';
+  document.querySelectorAll('.prod').forEach(el=>{
+    el.querySelector('.phead').onclick=()=>{ const n=decodeURIComponent(el.dataset.n); if(openSet.has(n))openSet.delete(n);else openSet.add(n); el.classList.toggle('open'); el.querySelector('.arrow').textContent=el.classList.contains('open')?DOWN:RIGHT; };
+  });
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+</script>
+</body>
+</html>
