@@ -58,10 +58,11 @@ h1{font-size:22px;margin:0 0 4px;font-weight:700;letter-spacing:-.2px}
 @media(max-width:720px){.kpis{grid-template-columns:repeat(2,1fr)}.pbar{width:80px}.phead{flex-wrap:wrap}.catrow{grid-template-columns:110px 1fr 70px}}
 </style></head>
 <body><div class="wrap">
-<h1>Product Availability &mdash; Available &amp; Non-Broken Colors</h1>
-<p class="sub">BlissClub warehouse stock, aggregated live to product &times; colour level from the <b>Raw Data - Total</b> sheet.</p>
-<p class="sub"><span id="asof">Loading live data from the sheet&hellip;</span> &middot; Use the Height filter for Regular vs Tall.</p>
-<span class="rule">A colour is &ldquo;available &amp; non-broken&rdquo; when &ge; 40% of its sizes each have &ge; 10 units in stock</span>
+<style>.kpis{grid-template-columns:repeat(6,1fr)}@media(max-width:720px){.kpis{grid-template-columns:repeat(2,1fr)}}</style>
+<h1>Product Availability &amp; Sales &mdash; BlissClub</h1>
+<p class="sub">Warehouse stock (Raw Data - Total) joined with rolling 30-day D2C sales, at product &times; colour level. Availability &amp; DOH by height (Regular / Tall).</p>
+<p class="sub"><span id="asof">Loading live data&hellip;</span></p>
+<span class="rule">Available &amp; non-broken = &ge;40% of sizes with &ge;10 units &middot; DOH = warehouse units &divide; adjusted daily sales (D2C sales grossed up assuming it is ~70% of true demand)</span>
 <div class="kpis" id="kpis"></div>
 <div class="cat-summary"><h3>Availability by category</h3><div id="catRows"></div></div>
 <div class="controls">
@@ -70,73 +71,110 @@ h1{font-size:22px;margin:0 0 4px;font-weight:700;letter-spacing:-.2px}
 <select id="fcat"></select>
 <select id="fcl"></select>
 <div class="seg" id="status"><button data-v="all" class="on">All colours</button><button data-v="ok">Available &amp; non-broken</button><button data-v="partial">Broken</button><button data-v="oos">No stocked sizes</button></div>
-<select id="sort"><option value="avail_desc">Sort: Availability % (high&rarr;low)</option><option value="avail_asc">Sort: Availability % (low&rarr;high)</option><option value="inv_desc">Sort: Total inventory (high&rarr;low)</option><option value="inv_asc">Sort: Total inventory (low&rarr;high)</option><option value="broken_desc">Sort: Most broken / unstocked colours</option><option value="name">Sort: Product A&rarr;Z</option><option value="colors_desc">Sort: Most colours</option></select>
+<select id="sort"><option value="units_desc">Sort: Units sold (high&rarr;low)</option><option value="doh_asc">Sort: DOH (low&rarr;high, urgent first)</option><option value="doh_desc">Sort: DOH (high&rarr;low, overstock)</option><option value="avail_desc">Sort: Availability % (high&rarr;low)</option><option value="avail_asc">Sort: Availability % (low&rarr;high)</option><option value="inv_desc">Sort: Inventory units (high&rarr;low)</option><option value="broken_desc">Sort: Most broken / unstocked</option><option value="name">Sort: Product A&rarr;Z</option></select>
 </div>
-<div class="legend"><span><i style="background:var(--ok)"></i>Available &amp; non-broken (&ge;40% sizes &ge;10 units)</span><span><i style="background:var(--amber)"></i>Broken (1-39% sizes &ge;10 units)</span><span><i style="background:var(--red)"></i>No stocked sizes (0 sizes &ge;10 units)</span></div>
+<div class="legend"><span><i style="background:var(--ok)"></i>Available &amp; non-broken</span><span><i style="background:var(--amber)"></i>Broken</span><span><i style="background:var(--red)"></i>No stocked sizes</span><span>&middot; DOH pill: <b style="color:var(--red)">red &lt;30d</b>, <b style="color:var(--amber)">amber 30-90d</b>, <b style="color:var(--ok)">green &gt;90d</b></span></div>
 <div class="count" id="count">Loading&hellip;</div>
 <div id="list"></div>
-<div class="foot">Reads the Raw Data - Total sheet live on each load &middot; availability = sizes with &ge;10 units &divide; total sizes.<br>Requires the sheet tab to be shared (Anyone with the link) or Published to web.</div>
+<div class="foot">Live: inventory feed + rolling 30-day D2C sales, read on each load &middot; DOH assumes captured D2C sales = 70% of true demand, 30-day window.<br>Units/DOH need the sales sheet shared (Anyone with the link). If sales can't load, availability still shows and sales/DOH read as &mdash;.</div>
 </div>
 <script src="https://www.gstatic.com/charts/loader.js"></script>
 <script>
-const SHEET_ID='1mLBVRMy2EFlq47ZSRuY7dASVx98mYOdaZu-NGXz8GbQ', GID='0';
+const INV_ID='1mLBVRMy2EFlq47ZSRuY7dASVx98mYOdaZu-NGXz8GbQ', INV_GID='0';
+const SALES_ID='1_KbxpsGHTA3d8Oj1Kp6p-UKQIl_FMw4QTx90wK7K33Q', SALES_GID='0';
+const LEAK=0.7, DAYS=30;
 const DOWN='▼', RIGHT='▶';
 const C={ok:'var(--ok)',partial:'var(--amber)',oos:'var(--red)'};
 const LBL={ok:'Available',partial:'Broken',oos:'No stock'};
 const STLBL={ok:'Available & non-broken',partial:'Broken',oos:'No stocked sizes'};
-let RAW=[], recs=[], products=[], height='all', statusFilter='all';
+let RAW=[], recs=[], products=[], height='all', statusFilter='all', salesOk=true;
 const $=id=>document.getElementById(id);
+const num=v=>{v=(v==null?0:+v); return isFinite(v)?v:0;};
+function gvizUrl(id,gid,tq){return 'https://docs.google.com/spreadsheets/d/'+id+'/gviz/tq?gid='+gid+'&headers=1&tq='+encodeURIComponent(tq);}
+function runQ(url,ok,err){const q=new google.visualization.Query(url);q.send(function(r){r.isError()?err(r):ok(r.getDataTable());});}
 google.charts.load('current');
-google.charts.setOnLoadCallback(load);
-function load(){
-  const tq=encodeURIComponent('select B,C,D,F,G,H');
-  const url='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?gid='+GID+'&headers=1&tq='+tq;
-  const q=new google.visualization.Query(url);
-  q.send(function(r){
-    if(r.isError()){ $('count').textContent='Could not load the sheet ('+r.getMessage()+'). Make sure the feed sheet is shared (Anyone with the link) or Published to web.'; $('asof').textContent='Live load failed'; return; }
-    const dt=r.getDataTable(), n=dt.getNumberOfRows(), m=new Map();
-    for(let i=0;i<n;i++){
-      let name=dt.getValue(i,0); if(name==null||(''+name).trim()==='')continue;
-      name=(''+name).trim();
-      const color=((dt.getValue(i,1)||'-')+'').trim();
-      const size=(dt.getValue(i,2)||'')+'';
-      const cat=((dt.getValue(i,3)||'-')+'').trim();
-      let inv=dt.getValue(i,4); inv=(inv==null?0:+inv)||0;
-      const cls=((dt.getValue(i,5)||'-')+'').trim();
-      const isTall=size.indexOf('Tall')>=0;
-      const k=name+'|||'+color;
-      let o=m.get(k); if(!o){o={prod:name,color:color,cat:cat,cl:cls,t:0,a:0,inv:0,tt:0,ta:0,tinv:0};m.set(k,o);}
-      o.t++; if(inv>=10)o.a++; o.inv+=inv;
-      if(isTall){o.tt++; if(inv>=10)o.ta++; o.tinv+=inv;}
+google.charts.setOnLoadCallback(loadInv);
+function loadInv(){
+  runQ(gvizUrl(INV_ID,INV_GID,'select B,C,D,F,G,H'), function(dt){
+    const m=new Map();
+    for(let i=0;i<dt.getNumberOfRows();i++){
+      let name=dt.getValue(i,0); if(name==null||(''+name).trim()==='')continue; name=(''+name).trim();
+      const color=((dt.getValue(i,1)||'-')+'').trim(), size=(dt.getValue(i,2)||'')+'', cat=((dt.getValue(i,3)||'-')+'').trim(), inv=num(dt.getValue(i,4)), cls=((dt.getValue(i,5)||'-')+'').trim();
+      const tall=size.indexOf('Tall')>=0, k=name+'|||'+color;
+      let o=m.get(k); if(!o){o={prod:name,color:color,cat:cat,cl:cls,t:0,a:0,inv:0,tt:0,ta:0,tinv:0,units:0,rev:0,unitsT:0,revT:0};m.set(k,o);}
+      o.t++; if(inv>=10)o.a++; o.inv+=inv; if(tall){o.tt++; if(inv>=10)o.ta++; o.tinv+=inv;}
     }
-    RAW=[...m.values()];
-    $('asof').textContent='Live from the sheet - loaded '+new Date().toLocaleString();
-    setupFilters(); rebuild();
-  });
+    window.__M=m; loadSalesAll();
+  }, function(r){ $('count').textContent='Could not load the inventory feed: '+r.getMessage(); });
 }
+function applySales(dt,tallField){
+  const m=window.__M;
+  for(let i=0;i<dt.getNumberOfRows();i++){
+    let name=dt.getValue(i,0); if(name==null)continue; name=(''+name).trim();
+    const k=name+'|||'+((dt.getValue(i,1)||'-')+'').trim();
+    const o=m.get(k); if(!o)continue;
+    const u=num(dt.getValue(i,2)), rv=num(dt.getValue(i,3));
+    if(tallField){o.unitsT=u;o.revT=rv;} else {o.units=u;o.rev=rv;}
+  }
+}
+function loadSalesAll(){
+  runQ(gvizUrl(SALES_ID,SALES_GID,'select E,F,sum(C),sum(J) group by E,F'),
+    function(dt){applySales(dt,false); loadSalesTall();},
+    function(r){salesOk=false; finalize();});
+}
+function loadSalesTall(){
+  runQ(gvizUrl(SALES_ID,SALES_GID,"select E,F,sum(C),sum(J) where G contains 'Tall' group by E,F"),
+    function(dt){applySales(dt,true); finalize();},
+    function(r){salesOk=false; finalize();});
+}
+function finalize(){
+  RAW=[...window.__M.values()];
+  const stamp=new Date().toLocaleString();
+  $('asof').textContent = salesOk ? ('Live — inventory + 30-day D2C sales, loaded '+stamp) : ('Live — inventory loaded '+stamp+'. Sales sheet not accessible (share it Anyone-with-link); units/DOH show as —.');
+  setupFilters(); rebuild();
+}
+function setupFilters(){
+  const cats=[...new Set(RAW.map(r=>r.cat))].filter(c=>c&&c!=='-').sort();
+  $('fcat').innerHTML='<option value="">All categories</option>'+cats.map(c=>'<option>'+c+'</option>').join('');
+  const cls=[...new Set(RAW.map(r=>r.cl))].filter(c=>c&&c!=='-').sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0));
+  $('fcl').innerHTML='<option value="">All price brackets</option>'+cls.map(c=>'<option>'+c+'</option>').join('');
+}
+document.querySelectorAll('#status button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#status button').forEach(x=>x.classList.remove('on'));b.classList.add('on');statusFilter=b.dataset.v;render();});
+$('fheight').onchange=e=>{height=e.target.value;rebuild();};
+$('q').oninput=render; $('fcat').onchange=render; $('fcl').onchange=render; $('sort').onchange=render;
+const openSet=new Set();
 function dims(r){
-  if(height==='reg') return {T:r.t-r.tt, A:r.a-r.ta, INV:r.inv-r.tinv};
-  if(height==='tall') return {T:r.tt, A:r.ta, INV:r.tinv};
-  return {T:r.t, A:r.a, INV:r.inv};
+  if(height==='reg') return {T:r.t-r.tt,A:r.a-r.ta,INV:r.inv-r.tinv,U:r.units-r.unitsT,RV:r.rev-r.revT};
+  if(height==='tall') return {T:r.tt,A:r.ta,INV:r.tinv,U:r.unitsT,RV:r.revT};
+  return {T:r.t,A:r.a,INV:r.inv,U:r.units,RV:r.rev};
 }
 function tierOf(A,T){ return A===0?'oos':(T>0&&A/T>=0.4?'ok':'partial'); }
+function doh(inv,units){ return units>0 ? inv*LEAK*DAYS/units : null; }
 function rebuild(){
   recs=[];
-  for(const r of RAW){ const dm=dims(r); if(dm.T<=0) continue;
-    recs.push({prod:r.prod,color:r.color,cat:r.cat,cl:r.cl,t:dm.T,a:dm.A,inv:dm.INV,pct:dm.T>0?dm.A/dm.T:0,tier:tierOf(dm.A,dm.T)}); }
+  for(const r of RAW){ const d=dims(r); if(d.T<=0) continue;
+    recs.push({prod:r.prod,color:r.color,cat:r.cat,cl:r.cl,t:d.T,a:d.A,inv:d.INV,units:d.U,rev:d.RV,pct:d.T>0?d.A/d.T:0,tier:tierOf(d.A,d.T),doh:doh(d.INV,d.U)}); }
   const pm=new Map();
   for(const r of recs){ if(!pm.has(r.prod))pm.set(r.prod,{name:r.prod,cat:r.cat,cl:r.cl,colors:[]}); pm.get(r.prod).colors.push(r); }
   products=[...pm.values()];
-  products.forEach(p=>{ p.ok=p.colors.filter(c=>c.tier==='ok').length; p.partial=p.colors.filter(c=>c.tier==='partial').length;
-    p.oos=p.colors.filter(c=>c.tier==='oos').length; p.tot=p.colors.length; p.availPct=p.tot?p.ok/p.tot:0; p.inv=p.colors.reduce((s,c)=>s+c.inv,0); });
+  products.forEach(p=>{
+    p.ok=p.colors.filter(c=>c.tier==='ok').length; p.partial=p.colors.filter(c=>c.tier==='partial').length; p.oos=p.colors.filter(c=>c.tier==='oos').length;
+    p.tot=p.colors.length; p.availPct=p.tot?p.ok/p.tot:0;
+    p.inv=p.colors.reduce((s,c)=>s+c.inv,0); p.units=p.colors.reduce((s,c)=>s+c.units,0); p.rev=p.colors.reduce((s,c)=>s+c.rev,0);
+    p.doh=doh(p.inv,p.units);
+  });
   renderKPIs(); renderCat(); render();
 }
+function fmtDoh(d){ return d==null?'&mdash;':(d<1?'<1d':Math.round(d)+'d'); }
+function dohColor(d){ return d==null?'var(--muted)':(d<30?'var(--red)':(d<=90?'var(--amber)':'var(--ok)')); }
 function renderKPIs(){
+  const uSold=recs.reduce((s,r)=>s+r.units,0);
   const K=[{n:products.length,l:'Products',c:''},{n:recs.length,l:'Colours (in view)',c:''},
     {n:recs.filter(r=>r.tier==='ok').length,l:'Available & non-broken',c:'ok'},
-    {n:recs.filter(r=>r.tier==='partial').length,l:'Broken (partial)',c:'amber'},
-    {n:recs.filter(r=>r.tier==='oos').length,l:'No stocked sizes',c:'red'}];
-  $('kpis').innerHTML=K.map(k=>{ const pct=k.l.indexOf('Colours')<0&&k.c&&recs.length?' <span style="font-size:13px;color:var(--muted);font-weight:600">('+Math.round(k.n/recs.length*100)+'%)</span>':'';
+    {n:recs.filter(r=>r.tier==='partial').length,l:'Broken',c:'amber'},
+    {n:recs.filter(r=>r.tier==='oos').length,l:'No stocked sizes',c:'red'},
+    {n:uSold,l:'Units sold (30d D2C)',c:''}];
+  $('kpis').innerHTML=K.map(k=>{ const pct=(k.l.indexOf('Available')===0||k.l.indexOf('Broken')===0||k.l.indexOf('No stocked')===0)&&recs.length?' <span style="font-size:13px;color:var(--muted);font-weight:600">('+Math.round(k.n/recs.length*100)+'%)</span>':'';
     return '<div class="kpi '+k.c+'"><div class="n">'+k.n.toLocaleString()+pct+'</div><div class="l">'+k.l+'</div></div>'; }).join('');
 }
 function renderCat(){
@@ -145,16 +183,6 @@ function renderCat(){
   $('catRows').innerHTML=cl.map(c=>{ const a=ca[c],w=x=>(x/a.t*100).toFixed(1)+'%';
     return '<div class="catrow"><div>'+c+' <span style="color:var(--muted)">('+a.t+')</span></div><div class="catbar"><span style="width:'+w(a.ok)+';background:var(--ok)"></span><span style="width:'+w(a.partial)+';background:var(--amber)"></span><span style="width:'+w(a.oos)+';background:var(--red)"></span></div><div class="pct">'+Math.round(a.ok/a.t*100)+'% avail</div></div>'; }).join('');
 }
-function setupFilters(){
-  const cats=[...new Set(RAW.map(r=>r.cat))].filter(c=>c&&c!=='-').sort();
-  $('fcat').innerHTML='<option value="">All categories</option>'+cats.map(c=>'<option>'+c+'</option>').join('');
-  const cls=[...new Set(RAW.map(r=>r.cl))].filter(c=>c&&c!=='-').sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0));
-  $('fcl').innerHTML='<option value="">All price brackets</option>'+cls.map(c=>'<option>'+c+'</option>').join('');
-}
-document.querySelectorAll('#status button').forEach(b=>b.onclick=()=>{ document.querySelectorAll('#status button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); statusFilter=b.dataset.v; render(); });
-$('fheight').onchange=e=>{height=e.target.value;rebuild();};
-$('q').oninput=render; $('fcat').onchange=render; $('fcl').onchange=render; $('sort').onchange=render;
-const openSet=new Set();
 function render(){
   const q=$('q').value.trim().toLowerCase(), cf=$('fcat').value, clf=$('fcl').value, sort=$('sort').value;
   let list=products.filter(p=>!cf||p.cat===cf).filter(p=>!clf||p.cl===clf);
@@ -165,31 +193,35 @@ function render(){
     if(cols.length===0) continue;
     view.push({p,cols});
   }
+  const DA=x=>x.p.doh==null?Infinity:x.p.doh, DD=x=>x.p.doh==null?-1:x.p.doh;
   const cmp={
+    units_desc:(a,b)=>b.p.units-a.p.units,
+    doh_asc:(a,b)=>DA(a)-DA(b),
+    doh_desc:(a,b)=>DD(b)-DD(a),
     avail_desc:(a,b)=>b.p.availPct-a.p.availPct||b.p.ok-a.p.ok,
     avail_asc:(a,b)=>a.p.availPct-b.p.availPct||a.p.ok-b.p.ok,
     inv_desc:(a,b)=>b.p.inv-a.p.inv,
-    inv_asc:(a,b)=>a.p.inv-b.p.inv,
     broken_desc:(a,b)=>(b.p.partial+b.p.oos)-(a.p.partial+a.p.oos),
     name:(a,b)=>a.p.name.localeCompare(b.p.name),
-    colors_desc:(a,b)=>b.p.tot-a.p.tot,
   }[sort];
   view.sort(cmp);
-  const shownColors=view.reduce((s,v)=>s+v.cols.length,0);
-  const hlbl=height==='reg'?'Regular sizes':(height==='tall'?'Tall sizes':'all sizes');
-  $('count').textContent=view.length+' products - '+shownColors+' colours shown ('+hlbl+')'+(statusFilter!=='all'?' - '+STLBL[statusFilter]:'');
+  const shown=view.reduce((s,v)=>s+v.cols.length,0);
+  const hlbl=height==='reg'?'Regular':(height==='tall'?'Tall':'all sizes');
+  $('count').textContent=view.length+' products - '+shown+' colours ('+hlbl+')'+(statusFilter!=='all'?' - '+STLBL[statusFilter]:'');
   const html=view.map(v=>{
     const p=v.p, w=x=>(x/p.tot*100).toFixed(1)+'%', open=openSet.has(p.name)?' open':'';
-    const cols=v.cols.slice().sort((a,b)=>b.pct-a.pct).map(c=>{
+    const cols=v.cols.slice().sort((a,b)=>b.units-a.units||b.pct-a.pct).map(c=>{
       const pctTxt=Math.round(c.pct*100)+'%';
       return '<div class="col '+c.tier+'"><div class="top"><span class="cn">'+esc(c.color)+'</span><span class="badge '+c.tier+'">'+LBL[c.tier]+'</span></div>'+
        '<div class="mini"><span style="width:'+pctTxt+';background:'+C[c.tier]+'"></span></div>'+
-       '<div class="meta"><span>'+c.a+' / '+c.t+' sizes &ge;10u</span><span>'+pctTxt+' &middot; '+c.inv.toLocaleString()+' units</span></div></div>';
+       '<div class="meta"><span>'+c.a+' / '+c.t+' sizes &ge;10u</span><span>'+c.inv.toLocaleString()+' units in stock</span></div>'+
+       '<div class="meta"><span>'+c.units.toLocaleString()+' sold / 30d</span><span>DOH <b style="color:'+dohColor(c.doh)+'">'+fmtDoh(c.doh)+'</b></span></div></div>';
     }).join('');
     return '<div class="prod'+open+'" data-n="'+encodeURIComponent(p.name)+'"><div class="phead"><div class="pname"><span class="arrow">'+(open?DOWN:RIGHT)+'</span>'+esc(p.name)+
       ' &nbsp;<span class="chip">'+esc(p.cat)+'</span> <span class="chip">Rs '+esc(p.cl)+'</span></div>'+
-      '<div class="pstats"><div class="pbar" title="'+p.ok+' available / '+p.partial+' broken / '+p.oos+' no stock"><span style="width:'+w(p.ok)+';background:var(--ok)"></span><span style="width:'+w(p.partial)+';background:var(--amber)"></span><span style="width:'+w(p.oos)+';background:var(--red)"></span></div>'+
-      '<div class="pfrac"><b style="color:var(--ok)">'+p.ok+'</b> / '+p.tot+' avail<br><span style="font-size:11px;color:var(--muted);font-weight:400">'+p.inv.toLocaleString()+' units</span></div></div></div>'+
+      '<div class="pstats"><div class="pbar" title="'+p.ok+' avail / '+p.partial+' broken / '+p.oos+' no stock"><span style="width:'+w(p.ok)+';background:var(--ok)"></span><span style="width:'+w(p.partial)+';background:var(--amber)"></span><span style="width:'+w(p.oos)+';background:var(--red)"></span></div>'+
+      '<div class="pfrac"><b style="color:var(--ok)">'+p.ok+'</b> / '+p.tot+' avail<br><span style="font-size:11px;color:var(--muted);font-weight:400">'+p.inv.toLocaleString()+' units</span></div>'+
+      '<div class="pfrac"><b>'+p.units.toLocaleString()+'</b> sold<br><span style="font-size:11px;color:var(--muted);font-weight:400">DOH <b style="color:'+dohColor(p.doh)+'">'+fmtDoh(p.doh)+'</b></span></div></div></div>'+
       '<div class="pbody"><div class="colors">'+cols+'</div></div></div>';
   }).join('');
   $('list').innerHTML=html||'<div class="empty">No products match these filters.</div>';
